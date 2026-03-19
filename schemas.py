@@ -33,9 +33,9 @@ class ProprietaireInfo(BaseModel):
 class FicheDossier(BaseModel):
     flux: Literal["locataire", "proprietaire", "autre"] = "autre"
     priorite: Optional[Literal["haute", "moyenne", "basse"]] = None
-    contact: ContactInfo = ContactInfo()
-    locataire: LocataireInfo = LocataireInfo()
-    proprietaire: ProprietaireInfo = ProprietaireInfo()
+    contact: Optional[ContactInfo] = ContactInfo()
+    locataire: Optional[LocataireInfo] = LocataireInfo()
+    proprietaire: Optional[ProprietaireInfo] = ProprietaireInfo()
     notes: Optional[str] = None
     resume: Optional[str] = None
 
