@@ -20,11 +20,9 @@ DEEPGRAM_PARAMS = {
     "encoding": "mulaw",
     "sample_rate": "8000",
     "channels": "1",
-    "endpointing": "200",          # Reduced from 300ms for faster detection
+    "endpointing": "300",
     "interim_results": "true",
-    "utterance_end_ms": "800",      # Reduced from 1000ms
-    "vad_events": "true",           # Enable VAD events for better silence detection
-    "smart_format": "true",         # Better formatting of numbers, dates etc.
+    "utterance_end_ms": "1000",
 }
 
 # Keepalive interval — Deepgram disconnects after ~10s of no messages
