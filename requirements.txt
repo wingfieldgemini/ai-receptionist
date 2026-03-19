@@ -1,8 +1,9 @@
 fastapi
 uvicorn[standard]
-websockets
+python-multipart
+websockets>=13.0,<15
 httpx
 openai>=1.50.0
 python-dotenv
 pydantic
-
+audioop-lts
