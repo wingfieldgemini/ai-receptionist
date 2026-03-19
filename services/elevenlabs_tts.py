@@ -87,7 +87,7 @@ async def synthesize_to_mulaw_chunks(text: str) -> AsyncGenerator[str, None]:
     for sentence in sentences:
         try:
             buffer = b""
-            chunk_size = 640  # 640 bytes = 80ms of ulaw_8000
+            chunk_size = 1280  # 1280 bytes = 160ms of ulaw_8000 (smoother phone playback, less overhead)
 
             async for raw_chunk in synthesize_stream(sentence):
                 buffer += raw_chunk
@@ -106,7 +106,7 @@ async def synthesize_to_mulaw_chunks(text: str) -> AsyncGenerator[str, None]:
             try:
                 raw = await synthesize(sentence)
                 if raw:
-                    for i in range(0, len(raw), chunk_size):
+                    for i in range(0, len(raw), 1280):
                         piece = raw[i:i + chunk_size]
                         if piece:
                             yield base64.b64encode(piece).decode("ascii")
