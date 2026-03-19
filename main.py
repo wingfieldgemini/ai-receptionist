@@ -1,10 +1,21 @@
-"""FastAPI server for AI voice receptionist — Twilio webhook + WebSocket media stream."""
+"""FastAPI server for AI voice receptionist — Twilio webhook + WebSocket media stream.
+
+Optimized pipeline:
+  Caller speaks → Deepgram STT → OpenAI (streaming) → ElevenLabs (streaming ulaw_8000) → Twilio
+  
+Key optimizations:
+  - OpenAI streams sentences as they're generated
+  - ElevenLabs streams audio as it's synthesized (native ulaw_8000, no resampling)
+  - Quick acknowledgments while processing complex queries
+  - Better interruption handling with clear messages
+"""
 
 from __future__ import annotations
 import asyncio
 import base64
 import json
 import logging
+import random
 import time
 from contextlib import asynccontextmanager
 
@@ -21,8 +32,8 @@ from services.twilio_handler import (
     build_clear_message,
 )
 from services.deepgram_stt import DeepgramSTT, test_deepgram
-from services.openai_brain import get_response, test_openai
-from services.elevenlabs_tts import synthesize_to_mulaw_chunks, test_elevenlabs
+from services.openai_brain import get_response_streaming, test_openai
+from services.elevenlabs_tts import synthesize_to_mulaw_chunks, synthesize_single_mulaw, test_elevenlabs
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +41,16 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+# Quick acknowledgment phrases Sofia uses while processing
+FILLERS = [
+    "D'accord.",
+    "Je note.",
+    "Très bien.",
+    "Parfait.",
+    "Je comprends.",
+    "Bien sûr.",
+]
 
 
 @asynccontextmanager
@@ -82,41 +103,84 @@ async def media_stream(ws: WebSocket):
     stream_sid: str | None = None
     transcript_task: asyncio.Task | None = None
     processing_lock = asyncio.Lock()
-    speaking_event = asyncio.Event()
-    speaking_event.set()
+    interrupted = asyncio.Event()  # Set when caller interrupts
+
+    # Track speaking state
+    is_speaking = False
+
+    async def send_audio_chunks(chunks_gen, check_interrupt: bool = True) -> bool:
+        """Send audio chunks to Twilio. Returns False if interrupted."""
+        nonlocal is_speaking
+        try:
+            async for audio_chunk in chunks_gen:
+                if check_interrupt and interrupted.is_set():
+                    return False
+                await ws.send_text(build_media_message(audio_chunk, stream_sid))
+            return True
+        except Exception as e:
+            logger.error(f"Audio send error: {e}")
+            return False
 
     async def process_transcript(text: str) -> None:
-        nonlocal conversation
+        """Process a transcript: get AI response with streaming pipeline."""
+        nonlocal is_speaking
         if not conversation or not stream_sid:
             return
 
-        if not speaking_event.is_set():
-            logger.info(f"[{conversation.call_sid}] ⚡ Interruption")
+        # Handle interruption if Sofia is speaking
+        if is_speaking:
+            logger.info(f"[{conversation.call_sid}] ⚡ Interruption detected")
+            interrupted.set()
             try:
                 await ws.send_text(build_clear_message(stream_sid))
             except Exception:
                 pass
-            speaking_event.set()
-            conversation.is_speaking = False
+            is_speaking = False
+            # Small delay to let clear take effect
+            await asyncio.sleep(0.1)
 
         async with processing_lock:
+            interrupted.clear()
             conversation.add_user_message(text)
-            ai_response = await get_response(conversation.get_openai_messages())
-            conversation.add_assistant_message(ai_response)
+            
+            is_speaking = True
+            t_start = time.time()
+            full_response_parts = []
+            first_sentence = True
 
-            speaking_event.clear()
-            conversation.is_speaking = True
             try:
-                async for audio_chunk in synthesize_to_mulaw_chunks(ai_response):
-                    if speaking_event.is_set():
+                async for sentence in get_response_streaming(conversation.get_openai_messages()):
+                    if interrupted.is_set():
                         break
-                    await ws.send_text(build_media_message(audio_chunk, stream_sid))
-                await ws.send_text(build_mark_message(stream_sid, "speech_end"))
+
+                    full_response_parts.append(sentence)
+
+                    if first_sentence:
+                        t_first = time.time()
+                        logger.info(f"[{conversation.call_sid}] ⏱️ First sentence in {t_first - t_start:.2f}s")
+                        first_sentence = False
+
+                    # Stream this sentence to TTS → Twilio
+                    completed = await send_audio_chunks(
+                        synthesize_to_mulaw_chunks(sentence),
+                        check_interrupt=True,
+                    )
+                    if not completed:
+                        break
+
+                # Send end mark
+                if not interrupted.is_set():
+                    await ws.send_text(build_mark_message(stream_sid, "speech_end"))
+
             except Exception as e:
-                logger.error(f"TTS send error: {e}")
+                logger.error(f"Pipeline error: {e}")
             finally:
-                speaking_event.set()
-                conversation.is_speaking = False
+                is_speaking = False
+                full_response = " ".join(full_response_parts)
+                if full_response:
+                    conversation.add_assistant_message(full_response)
+                    t_end = time.time()
+                    logger.info(f"[{conversation.call_sid}] ⏱️ Full response in {t_end - t_start:.2f}s")
 
     async def handle_transcripts(dg: DeepgramSTT) -> None:
         async for transcript in dg.receive_transcripts():
@@ -124,22 +188,19 @@ async def media_stream(ws: WebSocket):
                 await process_transcript(transcript)
 
     async def send_greeting() -> None:
-        nonlocal conversation
+        nonlocal is_speaking
         if not conversation or not stream_sid:
             return
         conversation.add_assistant_message(SOFIA_GREETING)
-        speaking_event.clear()
-        conversation.is_speaking = True
+        is_speaking = True
         try:
-            async for audio_chunk in synthesize_to_mulaw_chunks(SOFIA_GREETING):
-                await ws.send_text(build_media_message(audio_chunk, stream_sid))
+            await send_audio_chunks(synthesize_to_mulaw_chunks(SOFIA_GREETING), check_interrupt=False)
             await ws.send_text(build_mark_message(stream_sid, "greeting_end"))
             logger.info(f"[{conversation.call_sid}] ✅ Greeting sent")
         except Exception as e:
             logger.error(f"Greeting error: {e}")
         finally:
-            speaking_event.set()
-            conversation.is_speaking = False
+            is_speaking = False
 
     try:
         async for raw_message in ws.iter_text():
@@ -172,6 +233,10 @@ async def media_stream(ws: WebSocket):
                     if payload:
                         await deepgram.send_audio(base64.b64decode(payload))
 
+            elif event == "mark":
+                mark_name = data.get("mark", {}).get("name", "")
+                logger.debug(f"📍 Mark received: {mark_name}")
+
             elif event == "stop":
                 logger.info("⏹️ Stream stopped")
                 break
@@ -183,8 +248,12 @@ async def media_stream(ws: WebSocket):
     finally:
         if conversation:
             conversation.is_active = False
-            logger.info(f"📊 Call {conversation.call_sid} ended after {conversation.duration_seconds:.1f}s")
-            if len(conversation.messages) > 2:
+            logger.info(
+                f"📊 Call {conversation.call_sid} ended after "
+                f"{conversation.duration_seconds:.1f}s, "
+                f"{len(conversation.messages)} messages"
+            )
+            if len(conversation.messages) > 4:
                 try:
                     fiche = await conversation.extract_fiche()
                     logger.info(f"📋 FICHE: {fiche.model_dump_json(indent=2)}")
