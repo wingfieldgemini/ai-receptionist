@@ -53,8 +53,6 @@ class DeepgramSTT:
             self._ws = await websockets.connect(
                 url,
                 additional_headers=headers,
-                ping_interval=None,  # We handle keepalive ourselves
-                close_timeout=5,
             )
             self._connected = True
             self._closing = False
@@ -227,7 +225,7 @@ async def test_deepgram() -> dict:
         params = "&".join(f"{k}={v}" for k, v in DEEPGRAM_PARAMS.items())
         url = f"{DEEPGRAM_WS_URL}?{params}"
         headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}"}
-        ws = await websockets.connect(url, additional_headers=headers, ping_interval=None)
+        ws = await websockets.connect(url, additional_headers=headers)
         await ws.send(json.dumps({"type": "CloseStream"}))
         await ws.close()
         return {"status": "ok"}
