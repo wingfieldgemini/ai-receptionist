@@ -13,13 +13,11 @@ def generate_twiml() -> str:
     ws_url = SERVER_URL.replace("https://", "wss://").replace("http://", "ws://")
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say language="fr-FR">Veuillez patienter, connexion en cours.</Say>
     <Connect>
         <Stream url="{ws_url}/media-stream" />
     </Connect>
-    <Say language="fr-FR">Merci d'avoir appelé. Au revoir.</Say>
+    <Pause length="3600"/>
 </Response>"""
-
 
 def decode_mulaw_to_pcm16(base64_payload: str) -> bytes:
     """Decode Twilio base64 mulaw audio to 16-bit PCM at 8kHz."""
