@@ -20,9 +20,9 @@ DEEPGRAM_PARAMS = {
     "encoding": "mulaw",
     "sample_rate": "8000",
     "channels": "1",
-    "endpointing": "300",
+    "endpointing": "250",
     "interim_results": "true",
-    "utterance_end_ms": "1000",
+    "utterance_end_ms": "800",
 }
 
 # Keepalive interval — Deepgram disconnects after ~10s of no messages

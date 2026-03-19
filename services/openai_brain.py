@@ -28,7 +28,7 @@ async def get_response(messages: list[dict]) -> str:
             model=OPENAI_MODEL,
             messages=messages,
             temperature=OPENAI_TEMPERATURE,
-            max_tokens=300,
+            max_tokens=150,
         )
         result = response.choices[0].message.content.strip()
         logger.info(f"OpenAI response: {result[:100]}")
@@ -50,7 +50,7 @@ async def get_response_streaming(messages: list[dict]) -> AsyncGenerator[str, No
             model=OPENAI_MODEL,
             messages=messages,
             temperature=OPENAI_TEMPERATURE,
-            max_tokens=300,
+            max_tokens=150,
             stream=True,
         )
 

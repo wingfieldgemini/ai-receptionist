@@ -27,7 +27,7 @@ DEEPGRAM_API_KEY: str = _require("DEEPGRAM_API_KEY")
 # OpenAI
 OPENAI_API_KEY: str = _require("OPENAI_API_KEY")
 OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", "0.7"))
+OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", "0.5"))
 
 # ElevenLabs
 ELEVENLABS_API_KEY: str = _require("ELEVENLABS_API_KEY")
