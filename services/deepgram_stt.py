@@ -3,10 +3,9 @@
 from __future__ import annotations
 import json
 import logging
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 import websockets
-from websockets.asyncio.client import ClientConnection
 
 from config import DEEPGRAM_API_KEY
 
@@ -26,14 +25,11 @@ DEEPGRAM_PARAMS = {
 
 
 class DeepgramSTT:
-    """Manages a streaming WebSocket connection to Deepgram."""
-
     def __init__(self, call_sid: str):
         self.call_sid = call_sid
-        self._ws: Optional[ClientConnection] = None
+        self._ws = None
 
     async def connect(self) -> None:
-        """Open WebSocket connection to Deepgram."""
         params = "&".join(f"{k}={v}" for k, v in DEEPGRAM_PARAMS.items())
         url = f"{DEEPGRAM_WS_URL}?{params}"
         headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}"}
@@ -41,7 +37,6 @@ class DeepgramSTT:
         logger.info(f"[{self.call_sid}] Deepgram STT connected")
 
     async def send_audio(self, audio_bytes: bytes) -> None:
-        """Forward raw audio bytes to Deepgram."""
         if self._ws:
             try:
                 await self._ws.send(audio_bytes)
@@ -49,7 +44,6 @@ class DeepgramSTT:
                 logger.warning(f"[{self.call_sid}] Deepgram send error: {e}")
 
     async def receive_transcripts(self) -> AsyncGenerator[str, None]:
-        """Yield final transcript strings from Deepgram."""
         if not self._ws:
             return
         try:
@@ -59,35 +53,40 @@ class DeepgramSTT:
                 except json.JSONDecodeError:
                     continue
 
-                # Check for final transcripts
                 if msg.get("type") == "Results":
-                    channel = msg.get("channel", {})
-                    alternatives = channel.get("alternatives", [])
+                    alternatives = msg.get("channel", {}).get("alternatives", [])
                     if not alternatives:
                         continue
                     transcript = alternatives[0].get("transcript", "").strip()
                     is_final = msg.get("is_final", False)
-                    
                     if is_final and transcript:
+                        logger.info(f"[{self.call_sid}] STT: {transcript}")
                         yield transcript
-                        
-                # Handle utterance end
-                elif msg.get("type") == "UtteranceEnd":
-                    pass  # Handled by is_final above
 
         except websockets.exceptions.ConnectionClosed:
-            logger.info(f"[{self.call_sid}] Deepgram connection closed")
+            logger.info(f"[{self.call_sid}] Deepgram closed")
         except Exception as e:
-            logger.error(f"[{self.call_sid}] Deepgram receive error: {e}")
+            logger.error(f"[{self.call_sid}] Deepgram error ({type(e).__name__}): {e}")
 
     async def close(self) -> None:
-        """Close the Deepgram WebSocket connection."""
         if self._ws:
             try:
-                # Send close message to Deepgram
                 await self._ws.send(json.dumps({"type": "CloseStream"}))
                 await self._ws.close()
             except Exception:
                 pass
             self._ws = None
-            logger.info(f"[{self.call_sid}] Deepgram STT disconnected")
+            logger.info(f"[{self.call_sid}] Deepgram disconnected")
+
+
+async def test_deepgram() -> dict:
+    try:
+        params = "&".join(f"{k}={v}" for k, v in DEEPGRAM_PARAMS.items())
+        url = f"{DEEPGRAM_WS_URL}?{params}"
+        headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}"}
+        ws = await websockets.connect(url, additional_headers=headers)
+        await ws.send(json.dumps({"type": "CloseStream"}))
+        await ws.close()
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "error": f"{type(e).__name__}: {e}"}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 import json
 import logging
+import traceback
 
 from openai import AsyncOpenAI
 
@@ -17,15 +18,19 @@ client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 async def get_response(messages: list[dict]) -> str:
     """Get a conversational response from OpenAI given the full message history."""
     try:
+        logger.info(f"OpenAI request: model={OPENAI_MODEL}, messages={len(messages)}")
         response = await client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=messages,
             temperature=OPENAI_TEMPERATURE,
             max_tokens=300,
         )
-        return response.choices[0].message.content.strip()
+        result = response.choices[0].message.content.strip()
+        logger.info(f"OpenAI response: {result[:100]}")
+        return result
     except Exception as e:
-        logger.error(f"OpenAI error: {e}")
+        logger.error(f"OpenAI error ({type(e).__name__}): {e}")
+        logger.error(f"OpenAI traceback: {traceback.format_exc()}")
         return "Excusez-moi, j'ai un petit souci technique. Pouvez-vous répéter ?"
 
 
@@ -42,7 +47,6 @@ async def extract_fiche(conversation_text: str) -> dict:
             max_tokens=800,
         )
         raw = response.choices[0].message.content.strip()
-        # Strip markdown code fences if present
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
             if raw.endswith("```"):
@@ -53,5 +57,18 @@ async def extract_fiche(conversation_text: str) -> dict:
         logger.error(f"Failed to parse fiche JSON: {e}")
         return {}
     except Exception as e:
-        logger.error(f"OpenAI fiche extraction error: {e}")
+        logger.error(f"OpenAI fiche error ({type(e).__name__}): {e}")
         return {}
+
+
+async def test_openai() -> dict:
+    """Test OpenAI API connectivity."""
+    try:
+        response = await client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": "Say OK"}],
+            max_tokens=5,
+        )
+        return {"status": "ok", "model": OPENAI_MODEL, "response": response.choices[0].message.content.strip()}
+    except Exception as e:
+        return {"status": "error", "model": OPENAI_MODEL, "error": f"{type(e).__name__}: {e}"}

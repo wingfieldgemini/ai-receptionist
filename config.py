@@ -1,9 +1,12 @@
 """Configuration loaded from environment variables."""
 
 import os
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 def _require(key: str) -> str:
@@ -28,13 +31,11 @@ OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", "0.7"))
 
 # ElevenLabs
 ELEVENLABS_API_KEY: str = _require("ELEVENLABS_API_KEY")
-ELEVENLABS_VOICE_ID: str = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")  # Default: Sarah
+ELEVENLABS_VOICE_ID: str = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 ELEVENLABS_MODEL: str = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 
 # Server
-SERVER_URL: str = _require("SERVER_URL")  # e.g. https://your-app.up.railway.app
+SERVER_URL: str = _require("SERVER_URL")
 PORT: int = int(os.getenv("PORT", "8000"))
 
-# Audio
-SAMPLE_RATE_TWILIO: int = 8000
-SAMPLE_RATE_TTS: int = 16000
+logger.info(f"Config loaded: MODEL={OPENAI_MODEL}, VOICE={ELEVENLABS_VOICE_ID}, SERVER={SERVER_URL}")
