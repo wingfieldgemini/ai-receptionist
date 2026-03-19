@@ -122,7 +122,12 @@ async def media_stream(ws: WebSocket):
             return False
 
     async def process_transcript(text: str) -> None:
-        """Process a transcript: get AI response with streaming pipeline."""
+        """Process a transcript: get AI response with streaming pipeline.
+        
+        Error resilience:
+        - If OpenAI takes >3s for first sentence, play a filler while waiting
+        - If ElevenLabs fails for one sentence, skip it and continue
+        """
         nonlocal is_speaking
         if not conversation or not stream_sid:
             return
@@ -147,9 +152,42 @@ async def media_stream(ws: WebSocket):
             t_start = time.time()
             full_response_parts = []
             first_sentence = True
+            filler_sent = False
 
             try:
-                async for sentence in get_response_streaming(conversation.get_openai_messages()):
+                # Wrap streaming in a filler-aware loop
+                sentence_iter = get_response_streaming(conversation.get_openai_messages()).__aiter__()
+                
+                while True:
+                    if interrupted.is_set():
+                        break
+                    
+                    try:
+                        if first_sentence:
+                            # Wait up to 3s for first sentence; if slow, send filler
+                            try:
+                                sentence = await asyncio.wait_for(
+                                    sentence_iter.__anext__(), timeout=3.0
+                                )
+                            except asyncio.TimeoutError:
+                                if not filler_sent:
+                                    filler = random.choice(FILLERS)
+                                    logger.info(f"[{conversation.call_sid}] 🕐 OpenAI slow, sending filler: {filler}")
+                                    filler_sent = True
+                                    try:
+                                        await send_audio_chunks(
+                                            synthesize_to_mulaw_chunks(filler),
+                                            check_interrupt=True,
+                                        )
+                                    except Exception:
+                                        pass
+                                # Now wait without timeout for the actual response
+                                sentence = await sentence_iter.__anext__()
+                        else:
+                            sentence = await sentence_iter.__anext__()
+                    except StopAsyncIteration:
+                        break
+
                     if interrupted.is_set():
                         break
 
@@ -160,13 +198,17 @@ async def media_stream(ws: WebSocket):
                         logger.info(f"[{conversation.call_sid}] ⏱️ First sentence in {t_first - t_start:.2f}s")
                         first_sentence = False
 
-                    # Stream this sentence to TTS → Twilio
-                    completed = await send_audio_chunks(
-                        synthesize_to_mulaw_chunks(sentence),
-                        check_interrupt=True,
-                    )
-                    if not completed:
-                        break
+                    # Stream this sentence to TTS → Twilio (skip on ElevenLabs failure)
+                    try:
+                        completed = await send_audio_chunks(
+                            synthesize_to_mulaw_chunks(sentence),
+                            check_interrupt=True,
+                        )
+                        if not completed:
+                            break
+                    except Exception as e:
+                        logger.warning(f"[{conversation.call_sid}] TTS failed for sentence, skipping: {e}")
+                        continue
 
                 # Send end mark
                 if not interrupted.is_set():
