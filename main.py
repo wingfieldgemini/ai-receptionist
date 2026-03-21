@@ -68,6 +68,63 @@ async def health():
     return {"status": "ok", "timestamp": time.time()}
 
 
+@app.post("/vapi-webhook")
+async def vapi_webhook(request: Request):
+    """Handle Vapi server messages (end-of-call-report, transcript)."""
+    try:
+        data = await request.json()
+        msg_type = data.get("message", {}).get("type", "")
+        logger.info(f"📨 Vapi webhook: {msg_type}")
+        
+        if msg_type == "end-of-call-report":
+            transcript = data.get("message", {}).get("transcript", "")
+            summary = data.get("message", {}).get("summary", "")
+            logger.info(f"📋 Call ended. Summary: {summary[:200] if summary else 'N/A'}")
+        
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Vapi webhook error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/api/send-confirmation")
+async def api_send_confirmation(request: Request):
+    """API endpoint to send confirmation email — called by Vapi tool."""
+    from services.email_sender import send_confirmation_email
+    try:
+        data = await request.json()
+        
+        # Extract from Vapi tool call format or direct JSON
+        message = data.get("message", {})
+        tool_calls = message.get("toolCalls", [])
+        
+        if tool_calls:
+            # Vapi tool call format
+            params = tool_calls[0].get("function", {}).get("arguments", {})
+        else:
+            # Direct API call
+            params = data
+        
+        success = send_confirmation_email(
+            candidate_name=params.get("candidate_name", "Inconnu"),
+            candidate_phone=params.get("candidate_phone", "Non communiqué"),
+            candidate_email=params.get("candidate_email", ""),
+            bien_ref=params.get("bien_ref", ""),
+            bien_description=params.get("bien_description", ""),
+            disponibilites=params.get("disponibilites", ""),
+            call_type=params.get("call_type", "location"),
+            notes=params.get("notes", ""),
+        )
+        
+        if success:
+            return {"results": [{"result": "Email de confirmation envoyé avec succès."}]}
+        else:
+            return {"results": [{"result": "L'email n'a pas pu être envoyé. Les coordonnées ont été enregistrées."}]}
+    except Exception as e:
+        logger.error(f"Send confirmation error: {e}")
+        return {"results": [{"result": f"Erreur: {str(e)}"}]}
+
+
 @app.get("/test")
 async def test_apis():
     """Test all external API connections."""
