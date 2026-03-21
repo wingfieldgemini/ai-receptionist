@@ -38,7 +38,7 @@ ELEVENLABS_MODEL: str = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER: str = os.getenv("SMTP_USER", "samuelhwingfield@gmail.com")
-SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "bexa qhqm lepx jtal")
+SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "cviwaqmeqssyuzgl")
 AGENT_EMAIL: str = os.getenv("AGENT_EMAIL", "samuelhwingfield@gmail.com")
 
 # Server
