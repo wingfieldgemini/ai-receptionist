@@ -34,6 +34,13 @@ ELEVENLABS_API_KEY: str = _require("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID: str = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 ELEVENLABS_MODEL: str = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 
+# SMTP (email confirmations)
+SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER: str = os.getenv("SMTP_USER", "samuelhwingfield@gmail.com")
+SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "bexa qhqm lepx jtal")
+AGENT_EMAIL: str = os.getenv("AGENT_EMAIL", "samuelhwingfield@gmail.com")
+
 # Server
 SERVER_URL: str = _require("SERVER_URL")
 PORT: int = int(os.getenv("PORT", "8000"))

@@ -2,18 +2,13 @@
 
 import logging
 import smtplib
-import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, AGENT_EMAIL
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-AGENT_EMAIL = os.getenv("AGENT_EMAIL", "samuelhwingfield@gmail.com")
+logger = logging.getLogger(__name__)
 
 
 def send_confirmation_email(
